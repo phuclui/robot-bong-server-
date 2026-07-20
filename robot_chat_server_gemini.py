@@ -21,7 +21,7 @@ from flask import Flask, request, jsonify, Response
 #   set GEMINI_API_KEY="AIzaSy..."      (Windows)
 client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
-MODEL = "gemini-2.5-flash"   # free tier rộng rãi, tốc độ nhanh, hợp cho robot
+MODEL = "gemini-flash-latest"   # alias tự trỏ tới bản Flash mới nhất, tránh bị deprecated
 
 # ----- TÍNH CÁCH ROBOT -----
 SYSTEM_PROMPT = """\
@@ -87,7 +87,7 @@ def transcribe_audio(wav_bytes: bytes) -> str:
 # Model TTS riêng của Gemini (đang ở dạng Preview). Nếu model dưới đây
 # báo lỗi "not found", vào https://ai.google.dev/gemini-api/docs/speech-generation
 # để lấy đúng tên model TTS mới nhất.
-TTS_MODEL = "gemini-2.5-flash-tts"
+TTS_MODEL = "gemini-3.1-flash-tts-preview"
 TTS_VOICE = "Kore"   # xem thêm danh sách giọng tại link phía trên
 
 
