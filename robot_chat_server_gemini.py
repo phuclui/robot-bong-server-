@@ -9,8 +9,8 @@ Chạy:  python robot_chat_server.py
 """
 
 import os
-import io
-import wave
+import asyncio
+import edge_tts
 from google import genai
 from google.genai import types
 from flask import Flask, request, jsonify, Response
@@ -84,41 +84,25 @@ def transcribe_audio(wav_bytes: bytes) -> str:
 
 
 # ----- CHUYỂN VĂN BẢN THÀNH GIỌNG NÓI (TEXT-TO-SPEECH) -----
-# Model TTS riêng của Gemini (đang ở dạng Preview). Nếu model dưới đây
-# báo lỗi "not found", vào https://ai.google.dev/gemini-api/docs/speech-generation
-# để lấy đúng tên model TTS mới nhất.
-TTS_MODEL = "gemini-3.1-flash-tts-preview"
-TTS_VOICE = "Kore"   # xem thêm danh sách giọng tại link phía trên
+# Dùng edge-tts (giọng đọc của Microsoft Edge) - HOÀN TOÀN MIỄN PHÍ,
+# không giới hạn số lượt/ngày, không cần API key riêng.
+# Xem danh sách giọng: chạy lệnh `edge-tts --list-voices` hoặc xem
+# https://github.com/rany2/edge-tts
+TTS_VOICE = "vi-VN-HoaiMyNeural"   # giọng nữ miền Bắc, tự nhiên
+# TTS_VOICE = "vi-VN-NamMinhNeural"  # giọng nam, nếu muốn đổi
 
 
-def synthesize_speech(text: str) -> bytes:
-    """Chuyển text thành audio, trả về bytes của 1 file WAV hoàn chỉnh."""
-    response = client.models.generate_content(
-        model=TTS_MODEL,
-        contents=text,
-        config=types.GenerateContentConfig(
-            response_modalities=["AUDIO"],
-            speech_config=types.SpeechConfig(
-                voice_config=types.VoiceConfig(
-                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name=TTS_VOICE
-                    )
-                )
-            ),
-        ),
-    )
+def synthesize_speech_mp3(text: str) -> bytes:
+    """Chuyển text thành audio, trả về bytes dạng MP3."""
+    async def _generate():
+        communicate = edge_tts.Communicate(text, voice=TTS_VOICE)
+        audio_bytes = b""
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_bytes += chunk["data"]
+        return audio_bytes
 
-    # Gemini TTS trả về PCM thô: 24kHz, mono, 16-bit
-    pcm_data = response.candidates[0].content.parts[0].inline_data.data
-
-    wav_buffer = io.BytesIO()
-    with wave.open(wav_buffer, "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)      # 16-bit = 2 byte
-        wf.setframerate(24000)
-        wf.writeframes(pcm_data)
-
-    return wav_buffer.getvalue()
+    return asyncio.run(_generate())
 
 
 # ----- API ENDPOINT CHO ROBOT GỌI -----
@@ -158,18 +142,23 @@ def transcribe_endpoint():
         return f"Lỗi transcribe: {e}", 500
 
 
-@app.route("/tts", methods=["POST"])
+@app.route("/tts", methods=["GET", "POST"])
 def tts_endpoint():
-    data = request.get_json(force=True)
-    text = data.get("text", "")
+    # Hỗ trợ cả GET (?text=...) để ESP32 có thể mở thẳng URL này bằng
+    # thư viện giải mã MP3, và POST (JSON) cho các client khác.
+    if request.method == "GET":
+        text = request.args.get("text", "")
+    else:
+        data = request.get_json(force=True)
+        text = data.get("text", "")
 
     if not text:
         return jsonify({"error": "Thiếu 'text'"}), 400
 
     try:
-        wav_bytes = synthesize_speech(text)
-        # Trả về file WAV thô, ESP32 sẽ đọc trực tiếp bytes này để phát ra loa
-        return Response(wav_bytes, mimetype="audio/wav")
+        mp3_bytes = synthesize_speech_mp3(text)
+        # Trả về file MP3 thô, ESP32 dùng thư viện ESP32-audioI2S để giải mã trực tiếp
+        return Response(mp3_bytes, mimetype="audio/mpeg")
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
