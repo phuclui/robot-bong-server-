@@ -21,7 +21,7 @@ from flask import Flask, request, jsonify, Response
 #   set GEMINI_API_KEY="AIzaSy..."      (Windows)
 client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
-MODEL = "gemini-flash-latest"   # alias tự trỏ tới bản Flash mới nhất, tránh bị deprecated
+MODEL = "gemini-flash-lite-latest"   # quota free tier cao hơn hẳn bản Flash thường
 
 # ----- TÍNH CÁCH ROBOT -----
 SYSTEM_PROMPT = """\
